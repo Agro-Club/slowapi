@@ -2,45 +2,30 @@
 The starlette extension to rate-limit requests
 """
 import asyncio
-from datetime import datetime, timedelta
 import functools
 import inspect
 import itertools
-import json
 import logging
-import sys
 import time
-import warnings
+from datetime import datetime
 from email.utils import formatdate, parsedate_to_datetime
 from functools import wraps
-from typing import (
-    Any,
-    Awaitable,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-)
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypeVar, Union
 
 from limits import RateLimitItem  # type: ignore
+from limits.aio.strategies import FixedWindowRateLimiter
 from limits.errors import ConfigurationError  # type: ignore
-from limits.storage import Storage  # type: ignore
-from limits.storage import MemoryStorage, storage_from_string
-from limits.strategies import STRATEGIES, RateLimiter  # type: ignore
-from starlette.applications import Starlette
+from limits.storage import MemoryStorage, Storage, storage_from_string  # type: ignore
+from limits.strategies import (  # type: ignore
+    STRATEGIES,
+    MovingWindowRateLimiter,
+    RateLimiter,
+)
 from starlette.config import Config
-from starlette.exceptions import HTTPException
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from .errors import RateLimitExceeded
-from .util import get_ipaddr
 from .wrappers import Limit, LimitGroup
 
 # used to annotate get_app_config method
@@ -239,7 +224,9 @@ class Limiter:
         strategy = self._strategy or self.get_app_config(C.STRATEGY, "fixed-window")
         if strategy not in STRATEGIES:
             raise ConfigurationError("Invalid rate limiting strategy %s" % strategy)
-        self._limiter: RateLimiter = STRATEGIES[strategy](self._storage)
+        # TODO
+        # self._limiter: RateLimiter = STRATEGIES[strategy](self._storage)
+        self._limiter: FixedWindowRateLimiter = FixedWindowRateLimiter(self._storage)
         self._header_mapping.update(
             {
                 HEADERS.RESET: self._header_mapping.get(
@@ -404,7 +391,7 @@ class Limiter:
                     raise
         return response
 
-    def __evaluate_limits(
+    async def __evaluate_limits(
         self, request: Request, endpoint: str, limits: List[Limit]
     ) -> None:
         failed_limit = None
@@ -429,7 +416,7 @@ class Limiter:
                     args = [self._key_prefix] + args
                 if not limit_for_header or lim.limit < limit_for_header[0]:
                     limit_for_header = (lim.limit, args)
-                if not self.limiter.hit(lim.limit, *args):
+                if not await self.limiter.hit(lim.limit, *args):
                     self.logger.warning(
                         "ratelimit %s (%s) exceeded at endpoint: %s",
                         lim.limit,
@@ -470,7 +457,7 @@ class Limiter:
 
         return int(time.time() + retry_after_int)
 
-    def _check_request_limit(
+    async def _check_request_limit(
         self,
         request: Request,
         endpoint_func: Callable[..., Any],
@@ -541,7 +528,7 @@ class Limiter:
                 ):
                     all_limits += list(itertools.chain(*self._default_limits))
             # actually check the limits, so far we've only computed the list of limits to check
-            self.__evaluate_limits(request, endpoint, all_limits)
+            await self.__evaluate_limits(request, endpoint, all_limits)
         except Exception as e:  # no qa
             if isinstance(e, RateLimitExceeded):
                 raise
@@ -641,7 +628,7 @@ class Limiter:
                         if self._auto_check and not getattr(
                             request.state, "_rate_limiting_complete", False
                         ):
-                            self._check_request_limit(request, func, False)
+                            await self._check_request_limit(request, func, False)
                             request.state._rate_limiting_complete = True
                     response = await func(*args, **kwargs)  # type: ignore
                     if self.enabled:
