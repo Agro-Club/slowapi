@@ -45,7 +45,7 @@ class SlowAPIMiddleware(BaseHTTPMiddleware):
             request.state, "_rate_limiting_complete", False
         ):
             try:
-                limiter._check_request_limit(request, handler, True)
+                await limiter._check_request_limit(request, handler, True)
             except Exception as e:
                 # handle the exception since the global exception handler won't pick it up if we call_next
                 exception_handler = app.exception_handlers.get(

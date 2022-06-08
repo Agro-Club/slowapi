@@ -64,7 +64,7 @@ class HEADERS:
 MAX_BACKEND_CHECKS = 5
 
 
-def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Response:
+async def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Response:
     """
     Build a simple JSON response that includes the details of the rate limit
     that was hit. If no limit is hit, the countdown is added to headers.
@@ -382,7 +382,7 @@ class Limiter:
                         " in-memory storage"
                     )
                     self._storage_dead = True
-                    response = self._inject_headers(response, current_limit)
+                    response = await self._inject_headers(response, current_limit)
                 if self._swallow_errors:
                     self.logger.exception(
                         "Failed to update rate limit headers. Swallowing error"
@@ -538,7 +538,7 @@ class Limiter:
                     " in-memory storage"
                 )
                 self._storage_dead = True
-                self._check_request_limit(request, endpoint_func, in_middleware)
+                await self._check_request_limit(request, endpoint_func, in_middleware)
             else:
                 if self._swallow_errors:
                     self.logger.exception("Failed to rate limit. Swallowing error")
