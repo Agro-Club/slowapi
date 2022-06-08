@@ -16,7 +16,7 @@ include = ["slowapi/py.typed"]
 [tool.poetry.dependencies]
 python = ">=3.7,<4.0"
 limits = "2.6.2"
-motor = "3"
+motor = "2.5.1"
 redis = { version = "^4.1", optional = true}
 
 [tool.poetry.extras]
