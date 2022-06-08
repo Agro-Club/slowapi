@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypeVar, Uni
 from limits import RateLimitItem  # type: ignore
 from limits.aio.strategies import FixedWindowRateLimiter
 from limits.errors import ConfigurationError  # type: ignore
-from limits.storage import MemoryStorage, Storage, storage_from_string  # type: ignore
+from limits.storage import MemoryStorage, Storage, storage_from_string, MongoDBStorage  # type: ignore
 from limits.strategies import (  # type: ignore
     STRATEGIES,
     MovingWindowRateLimiter,
@@ -135,6 +135,7 @@ class Limiter:
         key_prefix: str = "",
         enabled: bool = True,
         config_filename: Optional[str] = None,
+        database_name: str = 'limits'
     ) -> None:
         """
         Configure the rate limiter at app level
@@ -217,6 +218,7 @@ class Limiter:
             C.HEADERS_ENABLED, False
         )
         self._storage_options.update(self.get_app_config(C.STORAGE_OPTIONS, {}))
+        self._storage_options.update({'database_name': database_name})
         self._storage: Storage = storage_from_string(
             self._storage_uri or self.get_app_config(C.STORAGE_URL, "memory://"),
             **self._storage_options,
@@ -224,8 +226,6 @@ class Limiter:
         strategy = self._strategy or self.get_app_config(C.STRATEGY, "fixed-window")
         if strategy not in STRATEGIES:
             raise ConfigurationError("Invalid rate limiting strategy %s" % strategy)
-        # TODO
-        # self._limiter: RateLimiter = STRATEGIES[strategy](self._storage)
         self._limiter: FixedWindowRateLimiter = FixedWindowRateLimiter(self._storage)
         self._header_mapping.update(
             {
@@ -338,7 +338,7 @@ class Limiter:
         else:
             return self._limiter
 
-    def _inject_headers(
+    async def _inject_headers(
         self, response: Response, current_limit: Tuple[RateLimitItem, List[str]]
     ) -> Response:
         if self.enabled and self._headers_enabled and current_limit is not None:
@@ -347,7 +347,7 @@ class Limiter:
                     "parameter `response` must be an instance of starlette.responses.Response"
                 )
             try:
-                window_stats: Tuple[int, int] = self.limiter.get_window_stats(
+                window_stats: Tuple[int, int] = await self.limiter.get_window_stats(
                     current_limit[0], *current_limit[1]
                 )
                 reset_in = 1 + window_stats[0]
@@ -634,11 +634,11 @@ class Limiter:
                     if self.enabled:
                         if not isinstance(response, Response):
                             # get the response object from the decorated endpoint function
-                            self._inject_headers(
+                            await self._inject_headers(
                                 kwargs.get("response"), request.state.view_rate_limit  # type: ignore
                             )
                         else:
-                            self._inject_headers(
+                            await self._inject_headers(
                                 response, request.state.view_rate_limit
                             )
                     return response

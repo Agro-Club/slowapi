@@ -45,11 +45,12 @@ class TestDecorators(TestSlowapi):
             response = await client.get("/t1")
             print(i, response.status_code, 200 if i < 5 else 429)
             assert response.status_code == 200 if i < 5 else 429
-        print()
 
     @pytest.mark.asyncio
     async def test_single_decorator_with_headers(self):
-        app, limiter = self.build_fastapi_mongo_app(key_func=get_ipaddr, headers_enabled=True)
+        app, limiter = self.build_fastapi_mongo_app(
+            key_func=get_ipaddr, headers_enabled=True
+        )
 
         @app.get("/t1")
         @limiter.limit("5/minute")
@@ -87,7 +88,9 @@ class TestDecorators(TestSlowapi):
 
     @pytest.mark.asyncio
     async def test_single_decorator_not_response_with_headers(self):
-        app, limiter = self.build_fastapi_mongo_app(key_func=get_ipaddr, headers_enabled=True)
+        app, limiter = self.build_fastapi_mongo_app(
+            key_func=get_ipaddr, headers_enabled=True
+        )
 
         @app.get("/t1")
         @limiter.limit("5/minute")
@@ -158,22 +161,22 @@ class TestDecorators(TestSlowapi):
         for i in range(0, 100):
             response = await cli.get("/t1", headers={"X_FORWARDED_FOR": "127.0.0.2"})
             resp_codes.append(response.status_code)
-            # assert response.status_code == 200 if i < 50 else 429
+            assert response.status_code == 200 if i < 50 else 429
         assert resp_codes.count(200) == 50
-        # for i in range(50):
-        #     assert await cli.get("/t1").status_code == 200
-        #
-        # assert await cli.get("/t1").status_code == 429
-        # assert (
-        #     await cli.get(
-        #         "/t1", headers={"X_FORWARDED_FOR": "127.0.0.3"}
-        #     ).status_code
-        #     == 429
-        # )
+        for i in range(50):
+            response = await cli.get("/t1")
+            assert response.status_code == 200
+
+        response = await cli.get("/t1")
+        assert response.status_code == 429
+        response = await cli.get("/t1", headers={"X_FORWARDED_FOR": "127.0.0.3"})
+        assert response.status_code == 429
 
     @pytest.mark.asyncio
     async def test_multiple_decorators_not_response_with_headers(self):
-        app, limiter = self.build_fastapi_mongo_app(key_func=get_ipaddr, headers_enabled=True)
+        app, limiter = self.build_fastapi_mongo_app(
+            key_func=get_ipaddr, headers_enabled=True
+        )
 
         @app.get("/t1")
         @limiter.limit(
@@ -183,7 +186,6 @@ class TestDecorators(TestSlowapi):
         async def t1(request: Request, response: Response):
             return {"key": "value"}
 
-        with hiro.Timeline().freeze() as timeline:
             cli = AsyncClient(
                 app=app,
                 base_url="http://testserver",
@@ -194,7 +196,8 @@ class TestDecorators(TestSlowapi):
                 )
                 assert response.status_code == 200 if i < 50 else 429
             for i in range(50):
-                assert await cli.get("/t1").status_code == 200
+                response = await cli.get("/t1")
+                assert response.status_code == 200
 
             assert await cli.get("/t1").status_code == 429
             assert (
@@ -240,7 +243,9 @@ class TestDecorators(TestSlowapi):
 
     @pytest.mark.asyncio
     async def test_endpoint_response_param_invalid(self):
-        app, limiter = self.build_fastapi_mongo_app(key_func=get_ipaddr, headers_enabled=True)
+        app, limiter = self.build_fastapi_mongo_app(
+            key_func=get_ipaddr, headers_enabled=True
+        )
 
         @app.get("/t4")
         @limiter.limit("5/minute")
