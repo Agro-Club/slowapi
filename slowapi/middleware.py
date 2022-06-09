@@ -3,12 +3,12 @@ from typing import Union
 from starlette.applications import Starlette
 from starlette.middleware.base import (
     BaseHTTPMiddleware,
-    RequestResponseEndpoint,
     DispatchFunction,
+    RequestResponseEndpoint,
 )
 from starlette.requests import Request
 from starlette.responses import Response
-from starlette.routing import Route, BaseRoute, WebSocketRoute, Match
+from starlette.routing import BaseRoute, Match, Route, WebSocketRoute
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 
@@ -45,7 +45,7 @@ class SlowAPIMiddleware(BaseHTTPMiddleware):
             request.state, "_rate_limiting_complete", False
         ):
             try:
-                limiter._check_request_limit(request, handler, True)
+                await limiter._check_request_limit(request, handler, True)
             except Exception as e:
                 # handle the exception since the global exception handler won't pick it up if we call_next
                 exception_handler = app.exception_handlers.get(
@@ -54,6 +54,6 @@ class SlowAPIMiddleware(BaseHTTPMiddleware):
                 return exception_handler(request, e)
             # request.state._rate_limiting_complete = True
             response = await call_next(request)
-            response = limiter._inject_headers(response, request.state.view_rate_limit)
+            response = await limiter._inject_headers(response, request.state.view_rate_limit)
             return response
         return await call_next(request)
